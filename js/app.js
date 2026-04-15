@@ -1,0 +1,475 @@
+/* ═══════════════════════════════════════════
+   C++ Drone Tutorial — App Core
+   State management, navigation, sidebar
+   ═══════════════════════════════════════════ */
+
+// ─── SECTION MANIFEST ────────────────────────
+const SECTIONS = [
+  {
+    id: 's1', num: '1',
+    title: 'Understanding the Drone Software Stack',
+    tag: 'Read first', tagColor: 'blue',
+    file: 'section-1.html'
+  },
+  {
+    id: 's2', num: '2',
+    title: 'Environment Setup',
+    tag: 'Do first', tagColor: 'green',
+    file: 'section-2.html'
+  },
+  {
+    id: 's25', num: '2.5',
+    title: 'C Fundamentals Refresher',
+    tag: 'Skip if confident', tagColor: 'orange',
+    file: 'section-2-5.html'
+  },
+  {
+    id: 's3', num: '3',
+    title: 'C++ Fundamentals for Drone Development',
+    tag: 'Core skill', tagColor: 'blue',
+    file: 'section-3.html'
+  },
+  {
+    id: 's4', num: '4',
+    title: 'Understanding ROS2',
+    tag: 'Core framework', tagColor: 'purple',
+    file: 'section-4.html'
+  },
+  {
+    id: 's5', num: '5',
+    title: 'First ROS2 Node in C++',
+    tag: 'Memorize this', tagColor: 'blue',
+    file: 'section-5.html'
+  },
+  {
+    id: 's6', num: '6',
+    title: 'Portfolio Projects',
+    tag: '4 projects', tagColor: 'green',
+    file: 'section-6.html'
+  },
+  {
+    id: 's7', num: '7',
+    title: 'Reading Real Drone Code',
+    tag: 'Month 3+', tagColor: 'amber',
+    file: 'section-7.html'
+  },
+  {
+    id: 's8', num: '8',
+    title: 'Open Source Contributions',
+    tag: 'Portfolio booster', tagColor: 'purple',
+    file: 'section-8.html'
+  },
+  {
+    id: 's9', num: '9',
+    title: 'Milestones and Schedule',
+    tag: 'Track progress', tagColor: 'green',
+    file: 'section-9.html'
+  },
+  {
+    id: 's10', num: '10',
+    title: 'Key Resources and Error Reference',
+    tag: 'Quick reference', tagColor: 'blue',
+    file: 'section-10.html'
+  },
+];
+
+// Num badge colors per section
+const NUM_COLORS = {
+  s1:  'background:#eff6ff;color:#1d4ed8;',
+  s2:  'background:#f0fdf4;color:#16a34a;',
+  s25: 'background:#fff7ed;color:#c2410c;',
+  s3:  'background:#eff6ff;color:#1d4ed8;',
+  s4:  'background:#f3e8ff;color:#6b21a8;',
+  s5:  'background:#eff6ff;color:#1d4ed8;',
+  s6:  'background:#f0fdf4;color:#16a34a;',
+  s7:  'background:#fef3c7;color:#92400e;',
+  s8:  'background:#f3e8ff;color:#6b21a8;',
+  s9:  'background:#f0fdf4;color:#16a34a;',
+  s10: 'background:#eff6ff;color:#1d4ed8;',
+};
+
+const TAG_COLORS = {
+  blue:   'background:var(--tag-blue-bg);color:var(--tag-blue);',
+  green:  'background:var(--tag-green-bg);color:var(--tag-green);',
+  amber:  'background:var(--tag-amber-bg);color:var(--tag-amber);',
+  purple: 'background:var(--tag-purple-bg);color:var(--tag-purple);',
+  orange: 'background:var(--tag-orange-bg);color:var(--tag-orange);',
+};
+
+// ─── STATE MANAGEMENT ─────────────────────────
+const STATE_KEY = 'drone_tutorial_state';
+
+function getState() {
+  try {
+    const raw = localStorage.getItem(STATE_KEY);
+    const state = raw ? JSON.parse(raw) : {};
+    if (!state.sections) state.sections = {};
+    if (!state.checkboxes) state.checkboxes = {};
+    return state;
+  } catch(e) {
+    return { sections: {}, checkboxes: {} };
+  }
+}
+
+function saveState(state) {
+  state.version = 2;
+  state.updated = new Date().toISOString();
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+  } catch(e) {
+    console.warn('Could not save state:', e);
+  }
+}
+
+function getSectionStatus(id) {
+  return getState().sections[id] || 'pending';
+}
+
+function setSectionStatus(id, status) {
+  const state = getState();
+  state.sections[id] = status;
+  saveState(state);
+}
+
+function getCompletedCount() {
+  const state = getState();
+  return SECTIONS.filter(s => state.sections[s.id] === 'completed').length;
+}
+
+// ─── CHECKBOX MANAGEMENT ──────────────────────
+function loadCheckboxes() {
+  const state = getState();
+  document.querySelectorAll('.checklist input[type=checkbox]').forEach(cb => {
+    cb.checked = !!state.checkboxes[cb.id];
+    if (cb.checked) cb.closest('li')?.classList.add('done');
+  });
+}
+
+function saveCheckbox(id, checked) {
+  const state = getState();
+  state.checkboxes[id] = checked;
+  saveState(state);
+}
+
+function bindCheckboxes() {
+  document.querySelectorAll('.checklist input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      saveCheckbox(cb.id, cb.checked);
+      const li = cb.closest('li');
+      if (cb.checked) li?.classList.add('done');
+      else li?.classList.remove('done');
+    });
+  });
+  loadCheckboxes();
+}
+
+// ─── EXPORT / IMPORT ──────────────────────────
+function exportState() {
+  const state = getState();
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+  const filename = `drone-tutorial-state-${ts}.json`;
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+function importStateFromJSON(json) {
+  try {
+    const incoming = JSON.parse(json);
+    if (!incoming.sections && !incoming.checkboxes) {
+      throw new Error('Invalid state format — missing sections or checkboxes');
+    }
+    const state = getState();
+    if (incoming.sections) Object.assign(state.sections, incoming.sections);
+    if (incoming.checkboxes) Object.assign(state.checkboxes, incoming.checkboxes);
+    saveState(state);
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function replaceStateFromJSON(json) {
+  try {
+    const incoming = JSON.parse(json);
+    if (!incoming.sections && !incoming.checkboxes) {
+      throw new Error('Invalid state format');
+    }
+    if (!incoming.sections) incoming.sections = {};
+    if (!incoming.checkboxes) incoming.checkboxes = {};
+    saveState(incoming);
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function clearState() {
+  localStorage.removeItem(STATE_KEY);
+}
+
+// ─── STATES DIRECTORY ────────────────────────
+// Fetch manifest.json from the states/ directory
+// Works when served over HTTP; gracefully fails on file://
+async function loadStatesManifest(basePath) {
+  try {
+    const resp = await fetch(basePath + 'states/manifest.json', { cache: 'no-store' });
+    if (!resp.ok) return { states: [] };
+    return await resp.json();
+  } catch(e) {
+    return { states: [] };
+  }
+}
+
+async function loadStateFile(basePath, filename) {
+  const resp = await fetch(basePath + 'states/' + filename, { cache: 'no-store' });
+  if (!resp.ok) throw new Error('File not found: ' + filename);
+  return resp.json();
+}
+
+// ─── SUB-SECTION ACCORDIONS ──────────────────
+function toggleSub(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+function expandAll() {
+  document.querySelectorAll('.sub-section').forEach(s => s.classList.add('open'));
+}
+
+function collapseAll() {
+  document.querySelectorAll('.sub-section').forEach(s => s.classList.remove('open'));
+}
+
+// ─── SIDEBAR ──────────────────────────────────
+function renderSidebar(currentSectionId, basePath) {
+  const state = getState();
+  const completed = SECTIONS.filter(s => state.sections[s.id] === 'completed').length;
+  const pct = Math.round((completed / SECTIONS.length) * 100);
+
+  const items = SECTIONS.map(s => {
+    const status = state.sections[s.id] || 'pending';
+    const isActive = s.id === currentSectionId;
+    return `
+      <li class="sidebar-item">
+        <a href="${basePath}pages/${s.file}" class="sidebar-link${isActive ? ' active' : ''}">
+          <span class="sidebar-num">${s.num}</span>
+          <span class="sidebar-title">${s.title}</span>
+          <span class="sidebar-status ${status}"></span>
+        </a>
+      </li>`;
+  }).join('');
+
+  return `
+    <nav class="sidebar" id="sidebar">
+      <ul class="sidebar-section-list">
+        ${items}
+      </ul>
+      <div class="sidebar-divider"></div>
+      <a href="${basePath}pages/settings.html" class="sidebar-link" style="margin-bottom:4px;">
+        <span class="sidebar-num" style="background:var(--bg3);">⚙</span>
+        <span class="sidebar-title">Export / Import State</span>
+      </a>
+      <div class="sidebar-footer">
+        <div class="sidebar-progress-label">Progress</div>
+        <div class="sidebar-progress-track">
+          <div class="sidebar-progress-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="sidebar-progress-count">${completed} / ${SECTIONS.length} completed</div>
+      </div>
+    </nav>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>`;
+}
+
+function openSidebar() {
+  document.getElementById('sidebar')?.classList.add('open');
+  document.getElementById('sidebarOverlay')?.classList.add('active');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebarOverlay')?.classList.remove('active');
+}
+
+// ─── STATUS PICKER ────────────────────────────
+function renderStatusPicker(sectionId) {
+  const current = getSectionStatus(sectionId);
+  const statuses = [
+    { id: 'pending',     label: 'Pending' },
+    { id: 'in-progress', label: 'In Progress' },
+    { id: 'completed',   label: 'Completed' },
+  ];
+  const buttons = statuses.map(s =>
+    `<button class="status-btn${s.id === current ? ' active' : ''}"
+       data-status="${s.id}" data-section="${sectionId}"
+       onclick="setStatus('${sectionId}','${s.id}',this)">
+       <span class="dot"></span>${s.label}
+     </button>`
+  ).join('');
+
+  return `
+    <div class="status-picker">
+      <span class="status-picker-label">Status</span>
+      ${buttons}
+    </div>`;
+}
+
+function setStatus(sectionId, status, btn) {
+  setSectionStatus(sectionId, status);
+  // Update all status buttons in this picker
+  const picker = btn.closest('.status-picker');
+  picker.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Update sidebar dot if present
+  const sidebarLink = document.querySelector(`.sidebar-link.active .sidebar-status`);
+  if (sidebarLink) {
+    sidebarLink.className = `sidebar-status ${status}`;
+  }
+  // Update sidebar progress
+  const pct = Math.round((getCompletedCount() / SECTIONS.length) * 100);
+  const fill = document.querySelector('.sidebar-progress-fill');
+  const count = document.querySelector('.sidebar-progress-count');
+  if (fill) fill.style.width = pct + '%';
+  if (count) count.textContent = getCompletedCount() + ' / ' + SECTIONS.length + ' completed';
+}
+
+// ─── PAGE HEADER ──────────────────────────────
+function renderPageHeader(sectionId) {
+  const s = SECTIONS.find(x => x.id === sectionId);
+  if (!s) return '';
+  return `
+    <div class="page-header">
+      <div class="page-header-top">
+        <div class="section-num-badge" style="${NUM_COLORS[sectionId]}">${s.num}</div>
+        <div class="page-header-info">
+          <h1>${s.title}</h1>
+          <div class="page-header-meta">
+            <span class="tag" style="${TAG_COLORS[s.tagColor]}">${s.tag}</span>
+          </div>
+        </div>
+      </div>
+      ${renderStatusPicker(sectionId)}
+    </div>`;
+}
+
+// ─── SECTION NAV ──────────────────────────────
+function renderSectionNav(sectionId, basePath) {
+  const idx = SECTIONS.findIndex(s => s.id === sectionId);
+  const prev = SECTIONS[idx - 1];
+  const next = SECTIONS[idx + 1];
+
+  const prevBtn = prev
+    ? `<a class="nav-btn" href="${basePath}pages/${prev.file}">
+         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+         <span>${prev.num}. ${prev.title.split(' ').slice(0,4).join(' ')}…</span>
+       </a>`
+    : `<a class="nav-btn disabled" href="#">
+         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+         <span>Start of course</span>
+       </a>`;
+
+  const nextBtn = next
+    ? `<a class="nav-btn primary" href="${basePath}pages/${next.file}">
+         <span>${next.num}. ${next.title.split(' ').slice(0,4).join(' ')}…</span>
+         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+       </a>`
+    : `<a class="nav-btn" href="${basePath}index.html">
+         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+         <span>Back to Dashboard</span>
+       </a>`;
+
+  return `
+    <div class="section-nav">
+      ${prevBtn}
+      <span class="nav-center">${idx + 1} / ${SECTIONS.length}</span>
+      ${nextBtn}
+    </div>`;
+}
+
+// ─── HEADER ───────────────────────────────────
+function renderHeader(basePath) {
+  return `
+    <header class="site-header">
+      <button class="btn-menu" onclick="openSidebar()" title="Toggle menu">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <a href="${basePath}index.html" class="header-logo">
+        <span class="logo-icon">🚁</span>
+        C++ Drone Tutorial
+      </a>
+      <div class="header-spacer"></div>
+      <div class="header-actions">
+        <a href="${basePath}pages/settings.html" class="btn-icon" title="Export / Import State">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </a>
+      </div>
+    </header>`;
+}
+
+// ─── PAGE INIT ────────────────────────────────
+// Called from each section page: initPage('s1', '../')
+function initPage(sectionId, basePath) {
+  basePath = basePath || '../';
+  document.body.innerHTML =
+    renderHeader(basePath) +
+    `<div class="layout">
+      ${renderSidebar(sectionId, basePath)}
+      <main class="main">
+        ${renderPageHeader(sectionId)}
+        <div class="section-content" id="section-body">
+          ${document.getElementById('page-content').innerHTML}
+        </div>
+        ${renderSectionNav(sectionId, basePath)}
+        <div class="page-footer">C++ for Drone Engineering · v1.0 · April 2026</div>
+      </main>
+    </div>`;
+
+  bindCheckboxes();
+}
+
+// ─── DASHBOARD INIT ───────────────────────────
+function initDashboard() {
+  // No sidebar on dashboard — just render progress and section list
+  const state = getState();
+  const completed = getCompletedCount();
+  const pct = Math.round((completed / SECTIONS.length) * 100);
+
+  // Update progress
+  const fill = document.getElementById('dashProgressFill');
+  const count = document.getElementById('dashProgressCount');
+  if (fill) fill.style.width = pct + '%';
+  if (count) count.textContent = completed + ' / ' + SECTIONS.length + ' completed';
+
+  // Render section cards
+  const list = document.getElementById('sectionList');
+  if (!list) return;
+
+  list.innerHTML = SECTIONS.map(s => {
+    const status = state.sections[s.id] || 'pending';
+    const statusLabel = status === 'in-progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1);
+    return `
+      <a href="pages/${s.file}" class="section-card">
+        <div class="snum" style="${NUM_COLORS[s.id]}">${s.num}</div>
+        <div class="section-card-body">
+          <div class="section-card-title">${s.title}</div>
+          <div class="section-card-meta">
+            <span class="tag" style="${TAG_COLORS[s.tagColor]}">${s.tag}</span>
+          </div>
+        </div>
+        <span class="section-card-status ${status}">${statusLabel}</span>
+        <svg class="section-card-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </a>`;
+  }).join('');
+}
